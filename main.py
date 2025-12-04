@@ -2,57 +2,170 @@ import cv2
 import numpy as np
 from keras.models import load_model
 from keras.preprocessing.image import img_to_array
+import os
+from flask import Flask, Response, render_template_string
 
-face_classifier = cv2.CascadeClassifier(r'haarcascade_frontalface_default.xml')
-classifier =load_model(r'model.h5')
+app = Flask(__name__)
 
-emotion_labels = [
-    'Angry',
-    'Disgust',
-    'Fear',
-    'Happy',
-    'Neutral',
-    'Sad',
-    'Surprise'
-]
-emojis = [
-    cv2.imread(f'emoji/{emotion}.png', cv2.IMREAD_UNCHANGED)
-       for emotion in emotion_labels
-]
+# 配置参数
+CASCADE_PATH = r'haarcascade_frontalface_default.xml'
+MODEL_PATH = r'model.h5'
+EMOJI_FOLDER = r'emoji'
+EMOTION_LABELS = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
 
-cap = cv2.VideoCapture(0)
+# 初始化变量
+face_classifier = None
+classifier = None
+emojis = []
+cap = None
 
 
+def init_resources():
+    """初始化所有资源"""
+    global face_classifier, classifier, emojis, cap
 
-while True:
-    _, frame = cap.read()
-    labels = []
-    gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-    faces = face_classifier.detectMultiScale(gray)
-    if len(faces) == 0:
-        continue
-    (x, y, w, h) = sorted(faces, key=lambda face: face[2] * face[3])[-1]
-    # cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,255),2)
-    roi_gray = gray[y:y+h,x:x+w]
-    roi_gray = cv2.resize(roi_gray,(48,48),interpolation=cv2.INTER_AREA)
-    if np.sum([roi_gray])!=0:
-        roi = roi_gray.astype('float')/255.0
-        roi = img_to_array(roi)
-        roi = np.expand_dims(roi,axis=0)
-
-        prediction = classifier.predict(roi)[0]
-        label = emotion_labels[prediction.argmax()]
-        emoji = cv2.resize(emojis[prediction.argmax()], (w, h))
-        for c in range(0, 3):
-            frame[y:y + h, x:x + w, c] = emoji[:, :, c] * (emoji[:, :, 3] / 255.0) + frame[y:y + h, x:x + w, c] * (
-                        1.0 - emoji[:, :, 3] / 255.0)
-        label_position = (x, y)
-        # cv2.putText(frame,label,label_position,cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,0),2)
+    # 加载人脸检测器
+    if os.path.exists(CASCADE_PATH):
+        face_classifier = cv2.CascadeClassifier(CASCADE_PATH)
     else:
-        cv2.putText(frame,'No Faces',(30,80),cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,0),2)
-    cv2.imshow('Emotion Detector',frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        raise FileNotFoundError(f"Haarcascade file not found: {CASCADE_PATH}")
 
-cap.release()
-cv2.destroyAllWindows()
+    # 加载情感识别模型
+    if os.path.exists(MODEL_PATH):
+        classifier = load_model(MODEL_PATH)
+    else:
+        raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
+
+    # 加载emoji图片
+    emojis = []
+    if os.path.exists(EMOJI_FOLDER):
+        for emotion in EMOTION_LABELS:
+            emoji_path = os.path.join(EMOJI_FOLDER, f"{emotion}.png")
+            if os.path.exists(emoji_path):
+                emoji = cv2.imread(emoji_path, cv2.IMREAD_UNCHANGED)
+                if emoji is not None:
+                    emojis.append(emoji)
+                else:
+                    # 使用默认表情
+                    emojis.append(np.zeros((48, 48, 4), dtype=np.uint8))
+            else:
+                emojis.append(np.zeros((48, 48, 4), dtype=np.uint8))
+    else:
+        # 如果emoji文件夹不存在，创建空的emoji数组
+        emojis = [np.zeros((48, 48, 4), dtype=np.uint8) for _ in EMOTION_LABELS]
+
+    # 初始化摄像头
+    cap = cv2.VideoCapture(0)
+    # 设置摄像头参数
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+    if not cap.isOpened():
+        raise RuntimeError("Failed to open camera")
+
+
+def generate_frames():
+    """生成视频流帧"""
+    global cap
+
+    # 确保资源已初始化
+    if cap is None or not cap.isOpened():
+        init_resources()
+
+    while True:
+        try:
+            # 读取帧
+            ret, frame = cap.read()
+            if not ret:
+                # 如果读取失败，尝试重新打开摄像头
+                cap.release()
+                cap = cv2.VideoCapture(0)
+                continue
+
+            labels = []
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # 检测人脸
+            faces = face_classifier.detectMultiScale(gray, scaleFactor=1.1,
+                                                     minNeighbors=5, minSize=(30, 30))
+
+            if len(faces) > 0:
+                # 选择最大的人脸
+                (x, y, w, h) = max(faces, key=lambda face: face[2] * face[3])
+
+                # 提取人脸区域
+                roi_gray = gray[y:y + h, x:x + w]
+                roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
+
+                if np.sum([roi_gray]) != 0:
+                    # 预处理用于模型预测
+                    roi = roi_gray.astype('float') / 255.0
+                    roi = img_to_array(roi)
+                    roi = np.expand_dims(roi, axis=0)
+
+                    # 预测情感
+                    prediction = classifier.predict(roi, verbose=0)[0]
+                    emotion_idx = prediction.argmax()
+                    label = EMOTION_LABELS[emotion_idx]
+
+                    # 调整emoji大小并叠加
+                    if emojis[emotion_idx] is not None and emojis[emotion_idx].size > 0:
+                        emoji = cv2.resize(emojis[emotion_idx], (w, h))
+
+                        # 确保emoji有alpha通道
+                        if emoji.shape[2] == 4:
+                            # 叠加emoji（带透明度）
+                            alpha_emoji = emoji[:, :, 3] / 255.0
+                            alpha_frame = 1.0 - alpha_emoji
+
+                            for c in range(0, 3):
+                                frame[y:y + h, x:x + w, c] = (emoji[:, :, c] * alpha_emoji +
+                                                              frame[y:y + h, x:x + w, c] * alpha_frame)
+
+
+            # 编码为JPEG
+            ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            if not ret:
+                continue
+
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+        except Exception as e:
+            # 捕获所有异常，确保视频流不中断
+            print(f"Error in frame generation: {e}")
+            continue
+
+
+@app.route('/video_feed')
+def video_feed():
+    """视频流路由"""
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.teardown_appcontext
+def cleanup(exception):
+    """应用关闭时清理资源"""
+    global cap
+    if cap is not None:
+        cap.release()
+    cv2.destroyAllWindows()
+
+
+if __name__ == '__main__':
+    try:
+        # 初始化资源
+        init_resources()
+
+        # 启动Flask应用
+        app.run(host='0.0.0.0', port=5001, threaded=True, debug=False)
+
+    except Exception as e:
+        print(f"Error starting application: {e}")
+    finally:
+        # 确保资源释放
+        if cap is not None:
+            cap.release()
+        cv2.destroyAllWindows()
