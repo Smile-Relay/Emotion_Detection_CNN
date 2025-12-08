@@ -58,9 +58,6 @@ def init_resources():
     # 初始化摄像头
     cap = init_camera()
 
-    if not cap.isOpened():
-        raise RuntimeError("Failed to open camera")
-
 
 def generate_frames():
     """生成视频流帧"""
