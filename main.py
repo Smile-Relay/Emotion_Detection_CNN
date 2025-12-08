@@ -3,7 +3,8 @@ import numpy as np
 from keras.models import load_model
 from keras.preprocessing.image import img_to_array
 import os
-from flask import Flask, Response, render_template_string
+from flask import Flask, Response
+from camera_init import init_camera
 
 app = Flask(__name__)
 
@@ -55,10 +56,7 @@ def init_resources():
         emojis = [np.zeros((48, 48, 4), dtype=np.uint8) for _ in EMOTION_LABELS]
 
     # 初始化摄像头
-    cap = cv2.VideoCapture(0)
-    # 设置摄像头参数
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap = init_camera()
 
     if not cap.isOpened():
         raise RuntimeError("Failed to open camera")
