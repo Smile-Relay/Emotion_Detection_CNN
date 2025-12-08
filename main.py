@@ -64,7 +64,7 @@ def generate_frames():
     global cap
 
     # 确保资源已初始化
-    if cap is None or not cap.isOpened():
+    if cap is None:
         init_resources()
 
     while True:
