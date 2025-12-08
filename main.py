@@ -4,7 +4,7 @@ from keras.models import load_model
 from keras.preprocessing.image import img_to_array
 import os
 from flask import Flask, Response
-from camera_init import init_camera
+from camera_init import init_camera, release_camera, read_frame
 
 app = Flask(__name__)
 
@@ -73,11 +73,11 @@ def generate_frames():
     while True:
         try:
             # 读取帧
-            ret, frame = cap.read()
+            ret, frame = read_frame()
             if not ret:
                 # 如果读取失败，尝试重新打开摄像头
-                cap.release()
-                cap = cv2.VideoCapture(0)
+                release_camera()
+                init_camera()
                 continue
 
             labels = []
@@ -148,7 +148,7 @@ def cleanup(exception):
     """应用关闭时清理资源"""
     global cap
     if cap is not None:
-        cap.release()
+        release_camera()
     cv2.destroyAllWindows()
 
 
@@ -165,5 +165,5 @@ if __name__ == '__main__':
     finally:
         # 确保资源释放
         if cap is not None:
-            cap.release()
+            release_camera()
         cv2.destroyAllWindows()
