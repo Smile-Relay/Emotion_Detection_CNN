@@ -81,7 +81,7 @@ def generate_frames():
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
             # 检测人脸
-            faces = face_classifier.detectMultiScale(gray, scaleFactor=1.1,
+            faces = face_classifier.detectMultiScale(gray, scaleFactor=1.5,
                                                      minNeighbors=3, minSize=(100, 100))
 
             if len(faces) > 0:
