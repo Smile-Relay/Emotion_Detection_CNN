@@ -85,37 +85,35 @@ def generate_frames():
                                                      minNeighbors=5, minSize=(30, 30))
 
             if len(faces) > 0:
-                # 选择最大的人脸
-                (x, y, w, h) = max(faces, key=lambda face: face[2] * face[3])
+                for (x, y, w, h) in faces:
+                    # 提取人脸区域
+                    roi_gray = gray[y:y + h, x:x + w]
+                    roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
 
-                # 提取人脸区域
-                roi_gray = gray[y:y + h, x:x + w]
-                roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
+                    if np.sum([roi_gray]) != 0:
+                        # 预处理用于模型预测
+                        roi = roi_gray.astype('float') / 255.0
+                        roi = img_to_array(roi)
+                        roi = np.expand_dims(roi, axis=0)
 
-                if np.sum([roi_gray]) != 0:
-                    # 预处理用于模型预测
-                    roi = roi_gray.astype('float') / 255.0
-                    roi = img_to_array(roi)
-                    roi = np.expand_dims(roi, axis=0)
+                        # 预测情感
+                        prediction = classifier.predict(roi, verbose=0)[0]
+                        emotion_idx = prediction.argmax()
+                        label = EMOTION_LABELS[emotion_idx]
 
-                    # 预测情感
-                    prediction = classifier.predict(roi, verbose=0)[0]
-                    emotion_idx = prediction.argmax()
-                    label = EMOTION_LABELS[emotion_idx]
+                        # 调整emoji大小并叠加
+                        if emojis[emotion_idx] is not None and emojis[emotion_idx].size > 0:
+                            emoji = cv2.resize(emojis[emotion_idx], (w, h))
 
-                    # 调整emoji大小并叠加
-                    if emojis[emotion_idx] is not None and emojis[emotion_idx].size > 0:
-                        emoji = cv2.resize(emojis[emotion_idx], (w, h))
+                            # 确保emoji有alpha通道
+                            if emoji.shape[2] == 4:
+                                # 叠加emoji（带透明度）
+                                alpha_emoji = emoji[:, :, 3] / 255.0
+                                alpha_frame = 1.0 - alpha_emoji
 
-                        # 确保emoji有alpha通道
-                        if emoji.shape[2] == 4:
-                            # 叠加emoji（带透明度）
-                            alpha_emoji = emoji[:, :, 3] / 255.0
-                            alpha_frame = 1.0 - alpha_emoji
-
-                            for c in range(0, 3):
-                                frame[y:y + h, x:x + w, c] = (emoji[:, :, c] * alpha_emoji +
-                                                              frame[y:y + h, x:x + w, c] * alpha_frame)
+                                for c in range(0, 3):
+                                    frame[y:y + h, x:x + w, c] = (emoji[:, :, c] * alpha_emoji +
+                                                                  frame[y:y + h, x:x + w, c] * alpha_frame)
 
 
             # 编码为JPEG
