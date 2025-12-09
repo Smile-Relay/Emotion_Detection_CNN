@@ -88,7 +88,7 @@ def generate_frames():
                 for (x, y, w, h) in faces:
                     # 提取人脸区域
                     roi_gray = gray[y:y + h, x:x + w]
-                    roi_gray = cv2.resize(roi_gray, (32, 32), interpolation=cv2.INTER_AREA)
+                    roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
 
                     if np.sum([roi_gray]) != 0:
                         # 预处理用于模型预测
