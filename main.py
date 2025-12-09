@@ -82,7 +82,7 @@ def generate_frames():
 
             # 检测人脸
             faces = face_classifier.detectMultiScale(gray, scaleFactor=1.1,
-                                                     minNeighbors=3, minSize=(60, 60))
+                                                     minNeighbors=3, minSize=(100, 100))
 
             if len(faces) > 0:
                 for (x, y, w, h) in faces:
