@@ -82,13 +82,13 @@ def generate_frames():
 
             # 检测人脸
             faces = face_classifier.detectMultiScale(gray, scaleFactor=1.1,
-                                                     minNeighbors=5, minSize=(30, 30))
+                                                     minNeighbors=3, minSize=(60, 60))
 
             if len(faces) > 0:
                 for (x, y, w, h) in faces:
                     # 提取人脸区域
                     roi_gray = gray[y:y + h, x:x + w]
-                    roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
+                    roi_gray = cv2.resize(roi_gray, (32, 32), interpolation=cv2.INTER_AREA)
 
                     if np.sum([roi_gray]) != 0:
                         # 预处理用于模型预测
